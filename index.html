@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Curve-Fit Playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f4f2ec;--card:#fffdf8;--line:#e3ded2;--ink:#23262b;--muted:#6c727e;--faint:#9aa0ac;
+    --fit:#e0532f;--data:#1f3a5f;--resid:#2a8a7a;--grid:#e9e5da;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1220px;margin:0 auto;padding:26px 22px 70px}
+  h1{font-weight:600;font-size:25px}h1 b{color:var(--fit)}
+  header p{color:var(--muted);font-size:13.5px;margin:4px 0 22px}
+  .layout{display:grid;grid-template-columns:330px 1fr;gap:20px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px;box-shadow:0 8px 24px -16px rgba(0,0,0,0.25)}
+  .card h2{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--faint);margin-bottom:13px;font-weight:600}
+  textarea{width:100%;height:180px;background:#fbfaf5;border:1px solid var(--line);border-radius:10px;padding:11px;
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink);outline:none;resize:vertical}
+  textarea:focus{border-color:var(--fit)}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  label.fld{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;font-weight:500}
+  select,input[type=number]{width:100%;background:#fbfaf5;border:1px solid var(--line);border-radius:9px;padding:10px;font-family:inherit;font-size:14px;color:var(--ink);outline:none}
+  select:focus{border-color:var(--fit)}
+  .degree{display:flex;align-items:center;gap:10px;margin-top:6px}
+  .degree input[type=range]{flex:1;accent-color:var(--fit)}
+  .btn{width:100%;border:none;cursor:pointer;background:var(--fit);color:#fff;font-family:inherit;font-weight:600;font-size:15px;
+    padding:13px;border-radius:10px;margin-top:16px;transition:background .15s}
+  .btn:hover{background:#c5431f}
+  .results{font-family:'IBM Plex Mono',monospace;font-size:13px}
+  .stat-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+  .stat-row:last-child{border:none}
+  .stat-row .k{color:var(--muted)}.stat-row .v{color:var(--ink);font-weight:600}
+  .stat-row .v.good{color:var(--resid)}.stat-row .v.bad{color:var(--fit)}
+  .eq{background:#fbfaf5;border:1px solid var(--line);border-radius:10px;padding:13px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--data);margin-bottom:14px;line-height:1.6;word-break:break-word}
+  .params{font-family:'IBM Plex Mono',monospace;font-size:12.5px}
+  .params .p{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .params .p .pn{color:var(--fit);font-weight:600}.params .p .pv{color:var(--ink)}.params .p .pe{color:var(--faint)}
+  canvas{display:block;width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px}
+  .plotwrap{margin-bottom:16px}
+  .err{color:var(--fit);font-size:13px;margin-top:8px}
+  .hint{font-size:12px;color:var(--faint);line-height:1.5;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Curve-Fit <b>Playground</b></h1>
+    <p>Paste <span class="mono">x  y</span> (optionally a third column <span class="mono">σy</span>), pick a model, and fit in your browser. Reports χ²/dof, parameter errors, and residuals.</p>
+  </header>
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>Data</h2>
+        <textarea id="data" spellcheck="false"></textarea>
+        <div class="hint">One point per line. Separators: space, comma or tab. Lines starting with # are ignored.</div>
+        <label class="fld">Model</label>
+        <select id="model">
+          <option value="poly">Polynomial</option>
+          <option value="exp">Exponential — a·e^(bx)+c</option>
+          <option value="pow">Power law — a·x^b</option>
+          <option value="gauss">Gaussian — A·e^(−(x−μ)²/2σ²)+c</option>
+          <option value="sin">Sinusoid — A·sin(ωx+φ)+c</option>
+        </select>
+        <div id="degWrap"><label class="fld">Polynomial degree: <span class="mono" id="degLbl">2</span></label>
+          <div class="degree"><input type="range" id="deg" min="0" max="7" value="2"></div></div>
+        <button class="btn" id="fitBtn">Fit ▸</button>
+        <div class="err" id="err"></div>
+      </div>
+    </div>
+    <div>
+      <div class="plotwrap"><canvas id="plot"></canvas></div>
+      <div class="plotwrap"><canvas id="resid"></canvas></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+        <div class="card" style="margin:0">
+          <h2>Fit</h2>
+          <div class="eq" id="eq">—</div>
+          <div class="params" id="params"></div>
+        </div>
+        <div class="card" style="margin:0">
+          <h2>Goodness of fit</h2>
+          <div class="results" id="gof"></div>
+          <div class="hint" id="gofHint"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  // ---------- linear algebra ----------
+  function solve(A,b){ // Gaussian elimination, A square
+    const n=b.length,M=A.map((r,i)=>r.concat(b[i]));
+    for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;
+      [M[c],M[p]]=[M[p],M[c]];const pv=M[c][c];if(Math.abs(pv)<1e-12)return null;
+      for(let r=0;r<n;r++){if(r===c)continue;const f=M[r][c]/pv;for(let k=c;k<=n;k++)M[r][k]-=f*M[c][k];}}
+    return M.map((r,i)=>r[n]/r[i]);
+  }
+  function inv(A){const n=A.length,M=A.map((r,i)=>r.concat(Array.from({length:n},(_,j)=>i===j?1:0)));
+    for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;
+      [M[c],M[p]]=[M[p],M[c]];const pv=M[c][c];if(Math.abs(pv)<1e-12)return null;
+      for(let k=0;k<2*n;k++)M[c][k]/=pv;
+      for(let r=0;r<n;r++){if(r===c)continue;const f=M[r][c];for(let k=0;k<2*n;k++)M[r][k]-=f*M[c][k];}}
+    return M.map(r=>r.slice(n));}
+
+  // ---------- models ----------
+  const MODELS={
+    exp:{names:["a","b","c"],f:(x,p)=>p[0]*Math.exp(p[1]*x)+p[2],
+      init:(xs,ys)=>{const ym=Math.max(...ys),yn=Math.min(...ys);return [ym-yn||1,0.1,yn];},
+      eq:p=>`y = ${p[0].toPrecision(4)}·e^(${p[1].toPrecision(4)}·x) + ${p[2].toPrecision(4)}`},
+    pow:{names:["a","b"],f:(x,p)=>p[0]*Math.pow(Math.max(x,1e-9),p[1]),
+      init:(xs,ys)=>[ys[0]||1,1],eq:p=>`y = ${p[0].toPrecision(4)}·x^${p[1].toPrecision(4)}`},
+    gauss:{names:["A","μ","σ","c"],f:(x,p)=>p[0]*Math.exp(-((x-p[1])**2)/(2*p[2]*p[2]))+p[3],
+      init:(xs,ys)=>{const ym=Math.max(...ys),i=ys.indexOf(ym),yn=Math.min(...ys);
+        return [ym-yn||1,xs[i],(Math.max(...xs)-Math.min(...xs))/6||1,yn];},
+      eq:p=>`y = ${p[0].toPrecision(4)}·exp(−(x−${p[1].toPrecision(4)})²/2·${p[2].toPrecision(4)}²) + ${p[3].toPrecision(4)}`},
+    sin:{names:["A","ω","φ","c"],f:(x,p)=>p[0]*Math.sin(p[1]*x+p[2])+p[3],
+      init:(xs,ys)=>{const ym=Math.max(...ys),yn=Math.min(...ys);const span=Math.max(...xs)-Math.min(...xs);
+        return [(ym-yn)/2||1,2*Math.PI/(span/2||1),0,(ym+yn)/2];},
+      eq:p=>`y = ${p[0].toPrecision(4)}·sin(${p[1].toPrecision(4)}·x + ${p[2].toPrecision(4)}) + ${p[3].toPrecision(4)}`}
+  };
+
+  // ---------- fitting ----------
+  function fitPoly(xs,ys,ws,deg){
+    const m=deg+1,N=Array.from({length:m},()=>Array(m).fill(0)),v=Array(m).fill(0);
+    for(let i=0;i<xs.length;i++){const w=ws[i];const pw=[];let xp=1;for(let k=0;k<2*m;k++){pw.push(xp);xp*=xs[i];}
+      for(let r=0;r<m;r++){v[r]+=w*ys[i]*pw[r];for(let c=0;c<m;c++)N[r][c]+=w*pw[r+c];}}
+    const p=solve(N,v);if(!p)return null;const cov=inv(N);
+    return{p,cov,f:(x)=>{let s=0,xp=1;for(let k=0;k<m;k++){s+=p[k]*xp;xp*=x;}return s;},names:Array.from({length:m},(_,k)=>"c"+k)};
+  }
+  function fitNL(xs,ys,ws,model){
+    const M=MODELS[model];let p=M.init(xs,ys).slice();const n=p.length;let lambda=1e-3;
+    const res=(pp)=>xs.map((x,i)=>(ys[i]-M.f(x,pp))*Math.sqrt(ws[i]));
+    const chi=(pp)=>res(pp).reduce((a,r)=>a+r*r,0);
+    let cur=chi(p);
+    for(let it=0;it<120;it++){
+      // numerical Jacobian of residuals wrt params
+      const r0=res(p);const J=xs.map(()=>Array(n).fill(0));
+      for(let j=0;j<n;j++){const dp=(Math.abs(p[j])||1)*1e-6;const pp=p.slice();pp[j]+=dp;const rj=res(pp);
+        for(let i=0;i<xs.length;i++)J[i][j]=(rj[i]-r0[i])/dp;}
+      const JtJ=Array.from({length:n},()=>Array(n).fill(0)),Jtr=Array(n).fill(0);
+      for(let i=0;i<xs.length;i++)for(let a=0;a<n;a++){Jtr[a]+=J[i][a]*r0[i];for(let b=0;b<n;b++)JtJ[a][b]+=J[i][a]*J[i][b];}
+      // Levenberg–Marquardt step. r = y−f, J = ∂r/∂p, Gauss–Newton: δ = (JᵀJ+λI)⁻¹ Jᵀr, p ← p − δ
+      const A=JtJ.map((row,a)=>row.map((v2,b)=>v2+(a===b?lambda*v2:0)));
+      const step=solve(A,Jtr);if(!step){lambda*=10;continue;}
+      const cand=p.map((v2,i)=>v2-step[i]);
+      const cc=chi(cand);
+      if(cc<cur){p=cand;cur=cc;lambda=Math.max(lambda*0.7,1e-9);}else{lambda*=2.5;if(lambda>1e8)break;}
+    }
+    // covariance ~ (JtJ)^-1 * chi2/dof
+    const r0=res(p);const J=xs.map(()=>Array(n).fill(0));
+    for(let j=0;j<n;j++){const dp=(Math.abs(p[j])||1)*1e-6;const pp=p.slice();pp[j]+=dp;const rj=res(pp);
+      for(let i=0;i<xs.length;i++)J[i][j]=(rj[i]-r0[i])/dp;}
+    const JtJ=Array.from({length:n},()=>Array(n).fill(0));
+    for(let i=0;i<xs.length;i++)for(let a=0;a<n;a++)for(let b=0;b<n;b++)JtJ[a][b]+=J[i][a]*J[i][b];
+    const cov=inv(JtJ);
+    return{p,cov,f:x=>M.f(x,p),names:M.names,eq:M.eq};
+  }
+
+  // ---------- parse & run ----------
+  function parse(t){const xs=[],ys=[],es=[];
+    t.split("\n").forEach(l=>{l=l.trim();if(!l||l[0]==="#")return;const parts=l.split(/[\s,;\t]+/).map(Number);
+      if(parts.length>=2&&isFinite(parts[0])&&isFinite(parts[1])){xs.push(parts[0]);ys.push(parts[1]);
+        es.push(parts.length>=3&&isFinite(parts[2])&&parts[2]>0?parts[2]:null);}});
+    return{xs,ys,es};}
+
+  let last=null;
+  function run(){
+    $("err").textContent="";
+    const {xs,ys,es}=parse($("data").value);
+    if(xs.length<2){$("err").textContent="Need at least 2 valid data points.";return;}
+    const hasErr=es.every(e=>e!=null);
+    const ws=es.map(e=>hasErr?1/(e*e):1);
+    const model=$("model").value;let fit;
+    if(model==="poly"){const deg=Math.min(+$("deg").value,xs.length-1);fit=fitPoly(xs,ys,ws,deg);}
+    else fit=fitNL(xs,ys,ws,model);
+    if(!fit){$("err").textContent="Fit failed — try a different model, degree, or initial data.";return;}
+    // chi2
+    let chi2=0;for(let i=0;i<xs.length;i++){const r=ys[i]-fit.f(xs[i]);chi2+=ws[i]*r*r;}
+    const dof=Math.max(1,xs.length-fit.p.length);
+    let cov=fit.cov;
+    if(!hasErr&&cov){const s=chi2/dof;cov=cov.map(row=>row.map(v=>v*s));}  // scale by reduced residual variance
+    const perr=fit.p.map((_,i)=>cov&&cov[i]&&cov[i][i]>0?Math.sqrt(cov[i][i]):NaN);
+    last={xs,ys,es,fit,hasErr};
+    render(fit,perr,chi2,dof,hasErr,model);
+    plot(xs,ys,es,fit);residPlot(xs,ys,es,fit,ws,hasErr);
+  }
+
+  function render(fit,perr,chi2,dof,hasErr,model){
+    // equation
+    $("eq").textContent = model==="poly"
+      ? "y = "+fit.p.map((c,k)=>`${c>=0&&k>0?"+ ":""}${c.toPrecision(4)}${k>0?"·x"+(k>1?"^"+k:""):""}`).join(" ")
+      : fit.eq(fit.p);
+    // params
+    $("params").innerHTML=fit.p.map((c,i)=>`<div class="p"><span class="pn">${fit.names[i]}</span>`+
+      `<span class="pv">${c.toPrecision(5)} <span class="pe">± ${isNaN(perr[i])?"—":perr[i].toPrecision(3)}</span></span></div>`).join("");
+    // gof
+    const red=chi2/dof;
+    $("gof").innerHTML=
+      `<div class="stat-row"><span class="k">χ²</span><span class="v">${chi2.toPrecision(5)}</span></div>`+
+      `<div class="stat-row"><span class="k">dof</span><span class="v">${dof}</span></div>`+
+      `<div class="stat-row"><span class="k">χ²/dof</span><span class="v ${red>0.5&&red<2?"good":"bad"}">${red.toPrecision(4)}</span></div>`+
+      `<div class="stat-row"><span class="k">data points</span><span class="v">${last.xs.length}</span></div>`;
+    $("gofHint").textContent=hasErr
+      ? (red>0.5&&red<2?"χ²/dof ≈ 1 — the model is consistent with your error bars.":red>=2?"χ²/dof ≫ 1 — model may be too simple, or errors underestimated.":"χ²/dof ≪ 1 — errors may be overestimated, or you're over-fitting.")
+      : "No σy column given, so errors were assumed equal and the covariance was scaled by the residual variance (χ²/dof = 1 by construction).";
+  }
+
+  // ---------- plotting ----------
+  function setupCanvas(cv,h){const w=cv.clientWidth;cv.width=w*devicePixelRatio;cv.height=h*devicePixelRatio;
+    cv.style.height=h+"px";const c=cv.getContext("2d");c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);return{c,w,h};}
+  function bounds(xs,ys,es){let xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+    es.forEach((e,i)=>{if(e){ymin=Math.min(ymin,ys[i]-e);ymax=Math.max(ymax,ys[i]+e);}});
+    const px=(xmax-xmin)*0.06||1,py=(ymax-ymin)*0.1||1;return{xmin:xmin-px,xmax:xmax+px,ymin:ymin-py,ymax:ymax+py};}
+  function axes(c,w,h,b,pad){
+    c.clearRect(0,0,w,h);c.strokeStyle="#e9e5da";c.lineWidth=1;c.fillStyle="#9aa0ac";c.font="11px IBM Plex Mono";
+    for(let i=0;i<=5;i++){const x=pad.l+(w-pad.l-pad.r)*i/5;c.beginPath();c.moveTo(x,pad.t);c.lineTo(x,h-pad.b);c.stroke();
+      const xv=b.xmin+(b.xmax-b.xmin)*i/5;c.fillText(xv.toPrecision(3),x-12,h-pad.b+15);}
+    for(let i=0;i<=4;i++){const y=pad.t+(h-pad.t-pad.b)*i/4;c.beginPath();c.moveTo(pad.l,y);c.lineTo(w-pad.r,y);c.stroke();
+      const yv=b.ymax-(b.ymax-b.ymin)*i/4;c.fillText(yv.toPrecision(3),4,y+3);}}
+  function mapper(w,h,b,pad){return{X:x=>pad.l+(w-pad.l-pad.r)*(x-b.xmin)/(b.xmax-b.xmin),
+    Y:y=>pad.t+(h-pad.t-pad.b)*(1-(y-b.ymin)/(b.ymax-b.ymin))};}
+  function plot(xs,ys,es,fit){
+    const {c,w,h}=setupCanvas($("plot"),300);const b=bounds(xs,ys,es);const pad={l:54,r:14,t:14,b:26};
+    axes(c,w,h,b,pad);const m=mapper(w,h,b,pad);
+    // fit curve
+    c.strokeStyle="#e0532f";c.lineWidth=2.2;c.beginPath();let first=true;
+    for(let i=0;i<=200;i++){const x=b.xmin+(b.xmax-b.xmin)*i/200;const y=fit.f(x);const py=m.Y(y);
+      if(py<pad.t-50||py>h-pad.b+50){first=true;continue;}first?(c.moveTo(m.X(x),py),first=false):c.lineTo(m.X(x),py);}
+    c.stroke();
+    // data + error bars
+    for(let i=0;i<xs.length;i++){const X=m.X(xs[i]),Y=m.Y(ys[i]);
+      if(es[i]){c.strokeStyle="#1f3a5f";c.lineWidth=1.3;c.beginPath();c.moveTo(X,m.Y(ys[i]-es[i]));c.lineTo(X,m.Y(ys[i]+es[i]));c.stroke();}
+      c.fillStyle="#1f3a5f";c.beginPath();c.arc(X,Y,3.2,0,7);c.fill();}
+  }
+  function residPlot(xs,ys,es,fit,ws,hasErr){
+    const {c,w,h}=setupCanvas($("resid"),150);
+    const rs=xs.map((x,i)=>(ys[i]-fit.f(x))*(hasErr?Math.sqrt(ws[i]):1));
+    const rmax=Math.max(1e-9,...rs.map(Math.abs))*1.2;const b={xmin:Math.min(...xs),xmax:Math.max(...xs),ymin:-rmax,ymax:rmax};
+    const px=(b.xmax-b.xmin)*0.06||1;b.xmin-=px;b.xmax+=px;const pad={l:54,r:14,t:12,b:24};
+    axes(c,w,h,b,pad);const m=mapper(w,h,b,pad);
+    c.strokeStyle="#2a8a7a";c.lineWidth=1.5;c.beginPath();c.moveTo(pad.l,m.Y(0));c.lineTo(w-pad.r,m.Y(0));c.stroke();
+    c.fillStyle="#9aa0ac";c.font="10px IBM Plex Mono";c.fillText(hasErr?"residuals (σ)":"residuals",pad.l+4,pad.t+10);
+    for(let i=0;i<xs.length;i++){c.fillStyle="#1f3a5f";c.beginPath();c.arc(m.X(xs[i]),m.Y(rs[i]),3,0,7);c.fill();
+      c.strokeStyle="rgba(31,58,95,0.4)";c.beginPath();c.moveTo(m.X(xs[i]),m.Y(0));c.lineTo(m.X(xs[i]),m.Y(rs[i]));c.stroke();}
+  }
+
+  // ---------- ui ----------
+  $("model").onchange=()=>{$("degWrap").style.display=$("model").value==="poly"?"block":"none";};
+  $("deg").oninput=e=>$("degLbl").textContent=e.target.value;
+  $("fitBtn").onclick=run;
+  addEventListener("resize",()=>{if(last){plot(last.xs,last.ys,last.es,last.fit);
+    const ws=last.es.map(e=>last.hasErr?1/(e*e):1);residPlot(last.xs,last.ys,last.es,last.fit,ws,last.hasErr);}});
+  // sample data: noisy gaussian peak
+  $("data").value="# x  y  sigma\n"+Array.from({length:21},(_,i)=>{const x=(i-10)*0.5;
+    const y=5*Math.exp(-((x-1)**2)/(2*1.5*1.5))+0.6+ (Math.sin(i*12.9898)*43758.5453%1)*0.6-0.3;
+    return x.toFixed(2)+"  "+y.toFixed(3)+"  0.3";}).join("\n");
+  $("model").value="gauss";$("degWrap").style.display="none";run();
+})();
+</script>
+</body>
+</html>
