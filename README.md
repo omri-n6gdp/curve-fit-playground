@@ -1,5 +1,7 @@
 # Curve-Fit Playground
 
+**▶ Try it online: [https://omri-n6gdp.github.io/curve-fit-playground/](https://omri-n6gdp.github.io/curve-fit-playground/)** (works on phones too)
+
 Interactive curve-fitting playground: pick a model, fit your data, see the residuals.
 
 ## How to use
